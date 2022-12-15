@@ -32,41 +32,13 @@ class CryptoUtils {
         keyGenerator.init(key_bit_size);
         SecretKey key = keyGenerator.generateKey();
         return key.getEncoded();
-        /*
-        SecureRandom random = new SecureRandom();
-        byte[] keyBytes = new byte[key_byte_size];
-        random.nextBytes(keyBytes);
-        return (new SecretKeySpec(keyBytes, "AES")).getEncoded();
-         */
     }
 
     byte[] generateAESKey(){
         return aes_key_generator(KEYBITSIZE);
     }
 
-    /*
-    private byte[] generate_key_from_pwd(String pwd){
-        SecureRandom random = new SecureRandom();
-        byte[] salt = new byte[16];
-        random.nextBytes(salt);
-
-        byte[] key = null;
-
-        try {
-            SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
-            KeySpec spec = new PBEKeySpec(pwd.toCharArray(), salt, 65536, 256);
-            SecretKey secret = new SecretKeySpec(factory.generateSecret(spec).getEncoded(), "AES");
-            key = secret.getEncoded();
-        }
-        catch(Exception e){
-            System.out.println("Error generate_key_from_pwd : " + e.toString());
-        }
-
-        return key;
-    }
-    */
-
-    byte[] recover_unlock_key(int nb_points, int nb_points_to_recover, Map<Integer, byte[]> parts){
+    byte[] recoverUnlockKey(int nb_points, int nb_points_to_recover, Map<Integer, byte[]> parts){
         if(parts.size() < nb_points_to_recover){
             System.out.println("Error : not enough points to recover unlock_key");
             return null;
@@ -107,7 +79,7 @@ class CryptoUtils {
         return new IvParameterSpec(iv);
     }
 
-    int AES256GCM_File_Encrypt(byte[] key, String inputPath, String outputPath){
+    int AES256GCMFileEncrypt(byte[] key, String inputPath, String outputPath){
         File inputFile = new File(inputPath);
         File outputFile = new File(outputPath);
         if(key.length != KEYBITSIZE /8){
@@ -149,7 +121,7 @@ class CryptoUtils {
             System.out.println("Error AES256GCM_File_Encrypt: " + e.toString());
         }finally {
             try {
-                if (inputStream != null) inputStream.close();
+                if (inputStream != null){ inputStream.close(); inputFile.delete();}
             } catch (Exception e) {
                 System.out.println("Error AES256GCM_File_Encrypt: " + e.toString());
             }
@@ -162,7 +134,7 @@ class CryptoUtils {
         return 0;
     }
 
-    int AES256GCM_File_Decrypt(byte[] key, String inputPath, String outputPath){
+    int AES256GCMFileDecrypt(byte[] key, String inputPath, String outputPath){
         File inputFile = new File(inputPath);
         File outputFile = new File(outputPath);
         if(key.length != KEYBITSIZE /8){
@@ -213,7 +185,7 @@ class CryptoUtils {
             System.out.println("Error AES256GCM_File_Decrypt: " + e.toString());
         }finally {
             try {
-                if (inputStream != null) inputStream.close();
+                if (inputStream != null) {inputStream.close(); inputFile.delete();}
             } catch (Exception e) {
                 System.out.println("Error AES256GCM_File_Decrypt: " + e.toString());
             }
@@ -226,7 +198,7 @@ class CryptoUtils {
         return 0;
     }
 
-    byte[] AES256GCM_String_Encrypt(byte[] key, byte[] data, IvParameterSpec iv){
+    byte[] AES256GCMStringEncrypt(byte[] key, byte[] data, IvParameterSpec iv){
         if(key.length != KEYBITSIZE /8){
             System.out.println("Error : key size doesn't match requirement [256 bit]");
             return null;
@@ -245,7 +217,7 @@ class CryptoUtils {
         return ret;
     }
 
-    byte[] AES256GCM_String_Decrypt(byte[] key, byte[] data, IvParameterSpec iv){
+    byte[] AES256GCMStringDecrypt(byte[] key, byte[] data, IvParameterSpec iv){
         if(key.length != KEYBITSIZE /8){
             System.out.println("Error : key size doesn't match requirement [256 bit]");
             return null;

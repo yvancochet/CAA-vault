@@ -1,7 +1,6 @@
 package vault.server;
 
 import com.google.gson.Gson;
-import vault.client.Client;
 
 import java.io.*;
 import java.net.*;
@@ -10,84 +9,85 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 public class Server {
-    private static int srv_port = 8008;
-    private static ServerSocket serverSocket;
+    private static final int srv_port = 8008;
     private static Socket clientSocket = null;
     private static BufferedReader in = null;
     private static BufferedWriter out = null;
     private static DataInputStream dataInputStream = null;
     private static DataOutputStream dataOutputStream = null;
-    private static final Gson gson = new Gson();
     private static String companyName = null;
     private static final String workPath = ".\\data\\server\\";
 
+//TODO : Catch connexion comme dans client
 
     public static void main(String[] args){
+        ServerSocket serverSocket;
         try {
             serverSocket = new ServerSocket(srv_port);
         } catch (IOException ex) {
             System.out.println("Error : " + ex.toString());
             return;
         }
+        while(true) {
+            try {
+                clientSocket = serverSocket.accept();
+                in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream(), StandardCharsets.UTF_8));
+                out = new BufferedWriter(new OutputStreamWriter(clientSocket.getOutputStream(), StandardCharsets.UTF_8));
+                dataInputStream = new DataInputStream(clientSocket.getInputStream());
+                dataOutputStream = new DataOutputStream(clientSocket.getOutputStream());
 
-        try {
-            clientSocket = serverSocket.accept();
-            in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream(), StandardCharsets.UTF_8));
-            out = new BufferedWriter(new OutputStreamWriter(clientSocket.getOutputStream(), StandardCharsets.UTF_8));
-            dataInputStream = new DataInputStream(clientSocket.getInputStream());
-            dataOutputStream = new DataOutputStream(clientSocket.getOutputStream());
-
-            String input;
-            while ((input = in.readLine()) != null) {
-                if (input.equalsIgnoreCase("close")) {
-                    break;
+                String input;
+                while ((input = in.readLine()) != null) {
+                    if (input.equalsIgnoreCase("close")) {
+                        break;
+                    }
+                    processInput(input);
                 }
-                process_input(input);
-            }
-            clientSocket.close();
-            in.close();
-            out.close();
-        } catch (Exception ex) {
-            if (in != null) {
-                try {
-                    in.close();
-                } catch (IOException ex1) {
-                    System.out.println("Error : " + ex1.toString());
+                clientSocket.close();
+                in.close();
+                out.close();
+            } catch (Exception ex) {
+                if (in != null) {
+                    try {
+                        in.close();
+                    } catch (IOException ex1) {
+                        System.out.println("Error : " + ex1.toString());
+                    }
                 }
-            }
-            if (dataInputStream != null) {
-                try {
-                    dataInputStream.close();
-                } catch (IOException ex1) {
-                    System.out.println("Error : " + ex1.toString());
+                if (dataInputStream != null) {
+                    try {
+                        dataInputStream.close();
+                    } catch (IOException ex1) {
+                        System.out.println("Error : " + ex1.toString());
+                    }
                 }
-            }
-            if (dataOutputStream != null) {
-                try {
-                    dataOutputStream.close();
-                } catch (IOException ex1) {
-                    System.out.println("Error : " + ex1.toString());
+                if (dataOutputStream != null) {
+                    try {
+                        dataOutputStream.close();
+                    } catch (IOException ex1) {
+                        System.out.println("Error : " + ex1.toString());
+                    }
                 }
-            }
-            if (out != null) {
-                try {
-                    out.close();
-                } catch (IOException ex1) {
-                    System.out.println("Error : " + ex1.toString());
+                if (out != null) {
+                    try {
+                        out.close();
+                    } catch (IOException ex1) {
+                        System.out.println("Error : " + ex1.toString());
+                    }
                 }
-            }
-            if (clientSocket != null) {
-                try {
-                    clientSocket.close();
-                } catch (IOException ex1) {
-                    System.out.println("Error : " + ex1.toString());
+                if (clientSocket != null) {
+                    try {
+                        clientSocket.close();
+                    } catch (IOException ex1) {
+                        System.out.println("Error : " + ex1.toString());
+                    }
                 }
+                System.out.println("Error : " + ex.toString());
             }
-            System.out.println("Error : " + ex.toString());
         }
     }
 
-    private static void process_input(String input) throws Exception {
+    private static void processInput(String input) throws Exception {
         String[] split_input = input.split("\\s+");
         System.out.println();
 
@@ -96,41 +96,18 @@ public class Server {
             return;
         }
 
-        switch (split_input[0].toLowerCase()){
-            case "new-company" :
-                newCompany(split_input[1]);
-                break;
-            case "select-company" :
-                selectCompany(split_input[1]);
-                break;
-            case "receive-file" :
-                receiveFile(split_input[1]);
-                break;
-            case "send-file" :
-                sendFile(split_input[1]);
-                break;
-            case "read-master-key.json" :
-                sendMasterKey();
-                break;
-            case "read-userpoints" :
-                sendUserPoints();
-                break;
-            case "read-nrecover" :
-                break;
-            case "dl" :
-                break;
-            case "upload" :
-                break;
-            case "revoke-user" :
-                break;
-            case "exit" :
-                break;
-            case "close" :
-                break;
-            default :
-                System.out.println("Error : unknown command ");
-                break;
+        switch (split_input[0].toLowerCase()) {
+            case "new-company" -> newCompany(split_input[1]);
+            case "select-company" -> selectCompany(split_input[1]);
+            case "receive-file" -> receiveFile(split_input[1]);
+            case "send-file" -> sendFile(split_input[1]);
+            case "delete-file" -> deleteFile(split_input[1]);
+            default -> System.out.println("Error : unknown command ");
         }
+    }
+
+    private static void deleteFile(String filename) {
+        (new File(Server.generatePath(filename))).delete();
     }
 
     private static void newCompany(String companyName) throws IOException {
@@ -148,16 +125,6 @@ public class Server {
         Server.companyName = companyName;
         out.write("ok\n");
         out.flush();
-    }
-
-    private static void sendMasterKey() throws IOException {
-        String masterKeyJson = Files.readString(Path.of(Server.workPath + companyName + "\\master-key.json"));
-        out.write(masterKeyJson + "\n");
-    }
-
-    private static void sendUserPoints() throws IOException {
-        String userPointsJson = Files.readString(Path.of(Server.workPath + companyName + "\\user-points.json"));
-        out.write(userPointsJson + "\n");
     }
 
     private static void selectCompany(String companyName) throws IOException {

@@ -25,8 +25,8 @@ import java.util.*;
 
 public class Client {
     //Communication attribute
-    private static String srv_name = "127.0.0.1";
-    private static int srv_port = 8008;
+    private static final String srv_name = "127.0.0.1";
+    private static final int srv_port = 8008;
     private static Socket clientSocket = null;
     private static BufferedWriter out = null;
     private static BufferedReader in = null;
@@ -50,15 +50,17 @@ public class Client {
     private static final String userPointListFilename = "upl.json";
     private static final String masterKeyFilename = "mk.json";
 
-    private static final String help = "select-company $companyName \t\t\t\t: Select $companyName vault - authentication required\n" +
-            "ls \t\t\t\t\t\t\t\t\t\t\t: List files contained in current company vault\n" +
-            "cat $filename\t\t\t\t\t\t\t\t: Print selected file\n" +
-            "dl $filename $outpath\t\t\t\t\t\t: Download selected file to $outpath\n" +
-            "upload $filename $path\t\t\t\t\t\t: Upload file as $filename from $path to vault\n" +
-            "revoke-user $username\t\t\t\t\t\t: Revoke a user - authentication required [each members]\n" +
-            "exit\t\t\t\t\t\t\t\t\t\t: Get out of current company's vault\n" +
-            "new-company $companyName $nUser\t: Creat a new company name $companyName with $nUser and 2 to unlock vault - require each users to create a login/pwd\n" +
-            "close \t\t\t\t\t\t\t\t\t\t: close vault.server connexion";
+    private static final String help = """
+            select-company $companyName \t: Select $companyName vault - authentication required
+            ls \t\t\t\t\t\t\t\t: List files contained in current company vault
+            cat $filename\t\t\t\t\t: Print selected file
+            dl $filename $outpath\t\t\t: Download selected $filename to $outpath /!\\ filename must not contain any space char || $outpath must be in between "" /!\\
+            upload $filename "$path"\t\t: Upload file as $filename from $path to vault /!\\ filename must not contain any space char || $path must be in between "" /!\\
+            delete $filename\t\t\t\t: delete $filename from vault
+            revoke-user $username\t\t\t: Revoke a user - authentication required [each members]
+            exit\t\t\t\t\t\t\t: Get out of current company's vault
+            new-company $companyName $nUser\t: Creat a new company name $companyName with $nUser and 2 to unlock vault - require each users to create a login/pwd
+            close \t\t\t\t\t\t\t: close vault.server connexion""";
 
     public static void main(String[] args){
         try {
@@ -73,97 +75,75 @@ public class Client {
             System.out.println("Welcome to CAA's vault vault.client ! Type 'help' to get available commands.");
             System.out.print("> ");
 
-            //Create working directory
-            new File(Client.workPath).mkdir();
+            //Create work directory
+            new File(Client.workPath).mkdirs();
 
+            //Get and compute user input while != "close"
             while ( (usrInput = sc.nextLine()) != null ) {
                 if (usrInput.equalsIgnoreCase("close")) {
-                    Client.cleanRoutine();
                     break;
                 }
                 process_input(usrInput);
                 System.out.print((Client.companyName == null ? "" : Client.companyName) + "> ");
             }
-            cleanRoutine();
-            //Close connexion
-
+            //Close connexion and clean routine
         } catch (Exception ex) {
-            System.out.println("Error : " + ex.toString());
+            System.out.println("Error : " + ex);
         } finally {
+            try {
+                if(Client.companyName != null)
+                    Client.exitCompany();
+                Client.cleanRoutine();
+            } catch(Exception ex){
+                System.out.println("Error : " + ex);
+            }
             try {
                 if (out != null) out.close();
             } catch (IOException ex) {
-                System.out.println("Error : " + ex.toString());
+                System.out.println("Error : " + ex);
             }
             try {
                 if (in != null) in.close();
             } catch (IOException ex) {
-                System.out.println("Error : " + ex.toString());
+                System.out.println("Error : " + ex);
             }
             try {
                 if (dataInputStream != null) dataInputStream.close();
             } catch (IOException ex) {
-                System.out.println("Error : " + ex.toString());
+                System.out.println("Error : " + ex);
             }
             try {
                 if (dataOutputStream != null) dataOutputStream.close();
             } catch (IOException ex) {
-                System.out.println("Error : " + ex.toString());
+                System.out.println("Error : " + ex);
             }
             try {
                 if (clientSocket != null && ! clientSocket.isClosed()) clientSocket.close();
             } catch (IOException ex) {
-                System.out.println("Error : " + ex.toString());
+                System.out.println("Error : " + ex);
             }
         }
-
-
-        //Initiate connexion with vault.server
-
-        /*select-company $companyName
-        1) Check if company exists -> yes : continue - no : error
-        2) Get ciphered master key
-        3) Get user points
-        4) Get file register (local copy)
-        5) User authentication to generate "unlock_key"
-        6) Get master_key
-        7) Get file_register clear
-        8) Delete working files
-         */
-
-        /*ls
-        1) Display file_register
-         */
-
-        /*cat $filename
-        1) Get file from vault.server
-        2) Uncipher file
-        3) Display file
-        4) Delete working files
-         */
-
-        /*dl $filename $outpath
-        1) Get file from vault.server
-        2) Uncipher in -> outpath
-        3) Delete working file
-         */
-
-        /*upload $filename $path
-        1) Create file_key
-        2) Create ciphered file
-        3) Send file to srv
-        4) Update file_register
-        5) Create ciphered file_register
-        6) Send file_register to srv
-         */
-
-
-        //test();
     }
 
     private static void cleanRoutine() throws IOException {
         //Delete working directory
         FileUtils.deleteDirectory(new File(Client.workPath));
+    }
+
+    private static boolean assertCompany(){
+        if(Client.companyName == null){
+            System.out.println("Error : you are not inside a company's vault");
+            return false;
+        }
+        return true;
+    }
+
+    private static boolean assertNParam(int required, int given){
+        if(given < required){
+            System.out.println("Error : not enough argument");
+            return false;
+        }
+        return true;
     }
 
     private static void process_input(String input) throws Exception {
@@ -172,11 +152,8 @@ public class Client {
 
         switch (split_input[0].toLowerCase()){
             case "select-company" :
-                if(split_input.length < 2){
-                    System.out.println("Error : not enough argument");
-                    break;
-                }
-                selectCompany(split_input[1]);
+                if(assertNParam(2, split_input.length))
+                    selectCompany(split_input[1]);
                 break;
             case "help" :
                 System.out.println(help);
@@ -185,51 +162,36 @@ public class Client {
                 test();
                 break;
             case "ls" :
-                if(Client.companyName != null)
+                if(Client.assertCompany())
                     printRegister();
-                else
-                    System.out.println("Error : you are not inside a company's vault");
                 break;
             case "cat" :
-                if(Client.companyName != null) {
-                    if (split_input.length < 2)
-                        System.out.println("Error : not enough argument");
-                    else
-                        printFile(split_input[1]);
-                }
-                else
-                    System.out.println("Error : you are not inside a company's vault");
+                if(Client.assertCompany() && assertNParam(2, split_input.length))
+                    printFile(split_input[1]);
+                break;
+            case "delete" :
+                if(Client.assertCompany() && assertNParam(2, split_input.length))
+                    deleteFile(split_input[1]);
                 break;
             case "dl" :
+                if(Client.assertCompany() && assertNParam(3, split_input.length))
+                    downloadFile(split_input[1], input.substring(input.indexOf("\"") + 1, input.lastIndexOf("\"")));
                 break;
             case "upload" :
-                if(Client.companyName != null) {
-                    if (split_input.length < 3)
-                        System.out.println("Error : not enough argument");
-                    else
-                        uploadFile(split_input[1], split_input[2]);
-                }
-                else
-                    System.out.println("Error : you are not inside a company's vault");
+                if(Client.assertCompany() && assertNParam(3, split_input.length))
+                    uploadFile(split_input[1], input.substring(input.indexOf("\"") + 1, input.lastIndexOf("\"")));
                 break;
             case "revoke-user" :
-                if(Client.companyName != null)
+                if(Client.assertCompany())
                     revokeUser();
-                else
-                    System.out.println("Error : you are not inside a company's vault");
                 break;
             case "new-company" :
-                if(split_input.length < 3){
-                    System.out.println("Error : not enough argument");
-                    break;
-                }
-                newCompany(split_input[1], split_input[2]);
+                if(assertNParam(3, split_input.length))
+                    newCompany(split_input[1], split_input[2]);
                 break;
             case "exit" :
-                if(Client.companyName != null)
+                if(assertCompany())
                     exitCompany();
-                else
-                    System.out.println("Error : you are not inside a company's vault");
                 break;
             case "close" :
                 break;
@@ -237,6 +199,25 @@ public class Client {
                 System.out.println("Error : unknown command ");
                 break;
         }
+    }
+
+    private static void deleteFile(String filename) throws IOException {
+        //Base32 used to avoid +, -, /, \ char
+        out.write("delete-file " +
+                Base32.toBase32String(Client.cry.sha256(Client.generateCipheredFilename(filename))) +
+                "\n");
+        out.flush();
+
+        Client.fileRegister.files.removeElement(filename);
+    }
+
+    private static void downloadFile(String filename, String outpath) throws Exception {
+        Client.receiveAndUncipher(filename);
+        File dst = new File(outpath);
+        File src = new File(Client.generatePath(filename));
+
+        FileUtils.copyFile(src, dst);
+        src.delete();
     }
 
     private static void printFile(String filename) throws Exception {
@@ -309,7 +290,7 @@ public class Client {
     }
 
     private static void cipherAndSend(String filename) throws Exception {
-        Client.cry.AES256GCM_File_Encrypt(Client.cry.generateFileKey(Client.vAttr.masterKey, filename),
+        Client.cry.AES256GCMFileEncrypt(Client.cry.generateFileKey(Client.vAttr.masterKey, filename),
                 Client.generatePath(filename),
                 Client.generatePath(Client.generateCipheredFilename(filename)));
 
@@ -319,11 +300,13 @@ public class Client {
     private static void receiveAndUncipher(String filename) throws Exception {
         Client.receiveFile(Client.generateCipheredFilename(filename));
 
-        Client.cry.AES256GCM_File_Decrypt(
+        Client.cry.AES256GCMFileDecrypt(
                 Client.cry.generateFileKey(Client.vAttr.masterKey, filename),
                 Client.generatePath(Client.generateCipheredFilename(filename)),
                 Client.generatePath(filename)
         );
+
+        (new File(Client.generateCipheredFilename(filename))).delete();
     }
 
     private static void newCompany(String companyName, String nUser) throws Exception {
@@ -386,7 +369,7 @@ public class Client {
     private static void sendMasterKey() throws Exception {
         IvParameterSpec iv = Client.cry.generateIV();
         CipheredMasterKey cmk = new CipheredMasterKey(
-                Base64.getEncoder().encodeToString(Client.cry.AES256GCM_String_Encrypt(Client.vAttr.unlockKey, Client.vAttr.masterKey, iv)),
+                Base64.getEncoder().encodeToString(Client.cry.AES256GCMStringEncrypt(Client.vAttr.unlockKey, Client.vAttr.masterKey, iv)),
                 Base64.getEncoder().encodeToString(iv.getIV())
         );
 
@@ -398,11 +381,12 @@ public class Client {
         Client.receiveFile(Client.masterKeyFilename);
         CipheredMasterKey cmk = getObjFromFile(Client.masterKeyFilename, CipheredMasterKey.class);
 
-        Client.vAttr.masterKey = Client.cry.AES256GCM_String_Decrypt(
+        Client.vAttr.masterKey = Client.cry.AES256GCMStringDecrypt(
                 Client.vAttr.unlockKey,
                 Base64.getDecoder().decode(cmk.ciphered_key),
                 new IvParameterSpec(Base64.getDecoder().decode(cmk.iv))
         );
+        (new File(Client.generatePath(Client.masterKeyFilename))).delete();
     }
 
     private static void initCompanyFolder() throws IOException{
@@ -436,7 +420,7 @@ public class Client {
             IvParameterSpec iv = Client.cry.generateIV();
             userPointList.userPoints[i] = new CipheredUserPoint(
                     Base64.getEncoder().encodeToString(cry.sha256(usernames[i])),
-                    Base64.getEncoder().encodeToString(Client.cry.AES256GCM_String_Encrypt(
+                    Base64.getEncoder().encodeToString(Client.cry.AES256GCMStringEncrypt(
                             Client.cry.sha256(passwords[i]),
                             pointMap.get(i+1),
                             iv
@@ -451,11 +435,6 @@ public class Client {
         Thread.sleep(50);
 
         sendMasterKey();
-    }
-
-    private static void generateKeys() {
-        Client.vAttr.masterKey = Client.cry.generateAESKey();
-        Client.vAttr.unlockKey = Client.cry.generateAESKey();
     }
 
     private static void selectCompany(String company_name) throws Exception {
@@ -482,6 +461,7 @@ public class Client {
         //Get user points from srv
         receiveFile(Client.userPointListFilename);
         CipheredUserPointList userPointList = getObjFromFile(Client.userPointListFilename, CipheredUserPointList.class);
+        (new File(Client.generatePath(Client.userPointListFilename))).delete();
 
         //Recover unlock key
         recoverUnlockKey(userPointList);
@@ -493,13 +473,14 @@ public class Client {
         Client.receiveAndUncipher(Client.registerFilename);
         Client.fileRegister = new FileRegister();
         Client.fileRegister = Client.getObjFromFile(Client.registerFilename, FileRegister.class);
+        (new File(Client.generatePath(Client.registerFilename))).delete();
 
         System.out.println("Vault unlocked");
     }
 
     private static void recoverUnlockKey(CipheredUserPointList userPointList) {
 
-        Map<Integer, byte[]> pointMap = new HashMap<Integer, byte[]>();
+        Map<Integer, byte[]> pointMap = new HashMap<>();
         //Client.cry.generateShamirPoints(Client.nUsers, Client.nRecover, Client.unlockKey);
 
         String username;
@@ -524,7 +505,7 @@ public class Client {
                 for (int j = 0; j < userPointList.userPoints.length; ++j) {
                     if (Objects.equals(userPointList.userPoints[j].username, hashUsername) && pointMap.get(j+1) == null) {
                         //If match, try to uncipher point with password hash
-                        recoveredPoint = Client.cry.AES256GCM_String_Decrypt(
+                        recoveredPoint = Client.cry.AES256GCMStringDecrypt(
                                 hashPassword,
                                 Base64.getDecoder().decode(userPointList.userPoints[j].cipher_point),
                                 new IvParameterSpec(Base64.getDecoder().decode(userPointList.userPoints[j].iv))
@@ -542,13 +523,13 @@ public class Client {
             }
         }
 
-        Client.vAttr.unlockKey = Client.cry.recover_unlock_key(userPointList.userPoints.length, Client.NRECOVER, pointMap);
+        Client.vAttr.unlockKey = Client.cry.recoverUnlockKey(userPointList.userPoints.length, Client.NRECOVER, pointMap);
     }
 
     private static String generatePath(String filename){ return Client.workPath + Client.companyName + "\\" + filename;}
 
     private static void sendFile(String filename) throws Exception{
-        int bytes = 0;
+        int bytes;
         File file = new File(Client.generatePath(filename));
         FileInputStream fileInputStream = new FileInputStream(file);
 
@@ -567,13 +548,14 @@ public class Client {
             dataOutputStream.flush();
         }
         fileInputStream.close();
+        file.delete();
     }
 
     private static void receiveFile(String filename) throws Exception{
-        int bytes = 0;
+        int bytes;
         FileOutputStream fileOutputStream = new FileOutputStream(Client.generatePath(filename));
 
-        //Base32 used to avoir +, -, /, \ char
+        //Base32 used to avoid +, -, /, \ char
         out.write("send-file " +
                 Base32.toBase32String(Client.cry.sha256(filename)) +
                 "\n");
@@ -589,116 +571,7 @@ public class Client {
     }
 
     private static void test(){
-        Client.fileRegister.files.add("coucou.txt");
-
-        /*
-        IvParameterSpec iv = cry.generateIV();
-        byte[] pwd = cry.sha256("password1");
-        CipheredUserPoint u1 = new CipheredUserPoint(Base64.getEncoder().encodeToString(cry.sha256("user1")),
-                Base64.getEncoder().encodeToString(cry.AES256GCM_String_Encrypt(pwd, parts.get(1), iv)),
-                Base64.getEncoder().encodeToString(iv.getIV()));
-
-        iv = cry.generateIV();
-        pwd = cry.sha256("password2");
-        CipheredUserPoint u2 = new CipheredUserPoint(Base64.getEncoder().encodeToString(cry.sha256("user2")),
-                Base64.getEncoder().encodeToString(cry.AES256GCM_String_Encrypt(pwd, parts.get(2), iv)),
-                Base64.getEncoder().encodeToString(iv.getIV()));
-
-        iv = cry.generateIV();
-        pwd = cry.sha256("password3");
-        CipheredUserPoint u3 = new CipheredUserPoint(Base64.getEncoder().encodeToString(cry.sha256("user3")),
-                Base64.getEncoder().encodeToString(cry.AES256GCM_String_Encrypt(pwd, parts.get(3), iv)),
-                Base64.getEncoder().encodeToString(iv.getIV()));
-
-        iv = cry.generateIV();
-        pwd = cry.sha256("password4");
-        CipheredUserPoint u4 = new CipheredUserPoint(Base64.getEncoder().encodeToString(cry.sha256("user4")),
-                Base64.getEncoder().encodeToString(cry.AES256GCM_String_Encrypt(pwd, parts.get(4), iv)),
-                Base64.getEncoder().encodeToString(iv.getIV()));
-
-        CipheredUserPointList upl = new CipheredUserPointList(4);
-        upl.userPoints[0] = u1;
-        upl.userPoints[1] = u2;
-        upl.userPoints[2] = u3;
-        upl.userPoints[3] = u4;
-
-        System.out.println(gson.toJson(upl));
-
-        System.out.println();
-        System.out.println();
-        System.out.println();
-
-        iv = cry.generateIV();
-        CipheredMasterKey cmk = new CipheredMasterKey(
-                Base64.getEncoder().encodeToString(cry.AES256GCM_String_Encrypt(unlock_key, master_key, iv)),
-                Base64.getEncoder().encodeToString(iv.getIV())
-        );
-
-        System.out.println(gson.toJson(cmk));
-*/
-        /*
-        CryptoUtils cli = new CryptoUtils();
-        byte[] master_key = cli.generate_master_key();
-
-        System.out.println("Master key : " + Base64.getEncoder().encodeToString(master_key));
-
-        Map<Integer, byte[]> parts = cli.generate_shamir_points(4, 2, master_key);
-
-        for(int i : parts.keySet()){
-            System.out.println("User " + i + ", value = " + Base64.getEncoder().encodeToString(parts.get(i)));
-        }
-
-        System.out.println();
-
-        Map<Integer, byte[]> recover_parts = new HashMap<>();
-        recover_parts.put(3, parts.get(3));
-        recover_parts.put(4, parts.get(4));
-
-        for(int i : recover_parts.keySet()){
-            System.out.println("Reco - User " + i + ", value = " + Base64.getEncoder().encodeToString(recover_parts.get(i)));
-        }
-
-        byte[] master_key_recovered = cli.recover_unlock_key(4,2, recover_parts);
-        System.out.println("Recovered master key : " + Base64.getEncoder().encodeToString(master_key_recovered));
-
-        System.out.println();
-
-        System.out.println("Hash 1 string 'hello' : " + Base64.getEncoder().encodeToString(cli.sha256("hello")));
-        System.out.println("Hash 2 string 'hello' : " + Base64.getEncoder().encodeToString(cli.sha256("hello")));
-        System.out.println("Hash 3 string 'coucou' : " + Base64.getEncoder().encodeToString(cli.sha256("coucou")));
-
-        System.out.println();
-
-        String stringcipher1 = "bonjour je m'appelle yvan lol !";
-        String pwdcipher1 = "password123";
-
-        System.out.println("String to cipher 1 : 'bonjour je m'appelle yvan lol !'");
-        System.out.println("Password to cipher 1 : 'password123'");
-
-        byte[] pwd_key = cli.sha256(pwdcipher1);
-        System.out.println("Key from password 1 : " + Base64.getEncoder().encodeToString(pwd_key));
-
-        IvParameterSpec iv1 = cli.generateIV();
-        byte[] cipher1 = cli.AES256_String_Encrypt(pwd_key, stringcipher1.getBytes(StandardCharsets.UTF_8), iv1);
-        System.out.println("Cipher from string 1 : " + Base64.getEncoder().encodeToString(cipher1));
-
-        byte[] recovered_cipher1 = cli.AES256_String_Decrypt(pwd_key, cipher1, iv1);
-        System.out.println("Recovered from cipher : " + new String(recovered_cipher1, StandardCharsets.UTF_8));
-
-        File claire = new File(".\\data\\vault.client\\claire.txt");
-        File cipher = new File(".\\data\\vault.client\\cipher.txt");
-        File uncipher = new File(".\\data\\vault.client\\uncipher.txt");
-
-        cli.AES256GCM_File_Encrypt(master_key, iv1, claire, cipher);
-        cli.AES256GCM_File_Decrypt(master_key, iv1, cipher, uncipher);
-
-        System.out.println();
-
-        System.out.println("Key with filename 'coucou' " + Base64.getEncoder().encodeToString(cli.generate_file_key(master_key, "coucou")));
-        System.out.println("Key with filename 'coucou' " + Base64.getEncoder().encodeToString(cli.generate_file_key(master_key, "coucou")));
-        System.out.println("Key with filename 'caca' " + Base64.getEncoder().encodeToString(cli.generate_file_key(master_key, "caca")));
-        System.out.println("Key with filename 'caca' " + Base64.getEncoder().encodeToString(cli.generate_file_key(master_key, "caca")));
-    */
+        System.out.println(help);
     }
 
 }
