@@ -10,18 +10,6 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
-//TODO : file/folder creation exception handling
-//TODO : Fonction writeObjToFile()
-
-//TODO : Cipher dans des fichiers avec IV intégré prcq flemme
-//TODO : file add / retrieve
-//TODO : select company retrieve
-//TODO : 1 obj client par connexion
-//TODO : String to file pour envoyer clé master
-//TODO : delete mk.json et upl.json after usage
-//TODO : Delete file function
-//TODO : Check path upload
-
 
 public class Client {
     //Communication attribute
@@ -48,7 +36,7 @@ public class Client {
     private static FileRegister fileRegister;
     private static final String registerFilename = "reg.json";
     private static final String userPointListFilename = "upl.json";
-    private static final String masterKeyFilename = "mk.json";
+    private static final String masterKeyFilename = "mk";
 
     private static final String help = """
             select-company $companyName \t: Select $companyName vault - authentication required
@@ -93,7 +81,8 @@ public class Client {
             try {
                 if(Client.companyName != null)
                     Client.exitCompany();
-                Client.cleanRoutine();
+                else
+                    Client.cleanRoutine();
             } catch(Exception ex){
                 System.out.println("Error : " + ex);
             }
@@ -125,11 +114,19 @@ public class Client {
         }
     }
 
+    /**
+     * Delete client working directory + content
+     * @throws IOException IOException
+     */
     private static void cleanRoutine() throws IOException {
         //Delete working directory
         FileUtils.deleteDirectory(new File(Client.workPath));
     }
 
+    /**
+     * Assert if a company is selected or not
+     * @return company selected or not
+     */
     private static boolean assertCompany(){
         if(Client.companyName == null){
             System.out.println("Error : you are not inside a company's vault");
@@ -138,6 +135,12 @@ public class Client {
         return true;
     }
 
+    /**
+     * Assert if user input matches number of parameter needed
+     * @param required Required number of param
+     * @param given Given number of param
+     * @return enough param or not
+     */
     private static boolean assertNParam(int required, int given){
         if(given < required){
             System.out.println("Error : not enough argument");
@@ -146,6 +149,11 @@ public class Client {
         return true;
     }
 
+    /**
+     * Process user input and call required functions
+     * @param input user input
+     * @throws Exception fileNotFound, IOException
+     */
     private static void process_input(String input) throws Exception {
         String[] split_input = input.split("\\s+");
         System.out.println();
@@ -175,11 +183,19 @@ public class Client {
                 break;
             case "dl" :
                 if(Client.assertCompany() && assertNParam(3, split_input.length))
-                    downloadFile(split_input[1], input.substring(input.indexOf("\"") + 1, input.lastIndexOf("\"")));
+                    try {
+                        downloadFile(split_input[1], input.substring(input.indexOf("\"") + 1, input.lastIndexOf("\"")));
+                    } catch(Exception e){
+                        System.out.println("Error : bad input");
+                    }
                 break;
             case "upload" :
                 if(Client.assertCompany() && assertNParam(3, split_input.length))
-                    uploadFile(split_input[1], input.substring(input.indexOf("\"") + 1, input.lastIndexOf("\"")));
+                    try {
+                        uploadFile(split_input[1], input.substring(input.indexOf("\"") + 1, input.lastIndexOf("\"")));
+                    } catch(Exception e){
+                        System.out.println("Error : bad input");
+                    }
                 break;
             case "revoke-user" :
                 if(Client.assertCompany())
@@ -201,6 +217,11 @@ public class Client {
         }
     }
 
+    /**
+     * Delete a file on server side
+     * @param filename filename to delete
+     * @throws IOException fileNotFound, IOException
+     */
     private static void deleteFile(String filename) throws IOException {
         //Base32 used to avoid +, -, /, \ char
         out.write("delete-file " +
@@ -208,9 +229,21 @@ public class Client {
                 "\n");
         out.flush();
 
+        String srvResponse = in.readLine();
+        if(Objects.equals(srvResponse, "ok"))
+            System.out.println("File deleted successfully");
+        else if(Objects.equals(srvResponse, "error"))
+            System.out.println("Error : nu such file");
+
         Client.fileRegister.files.removeElement(filename);
     }
 
+    /**
+     * Download a file from server
+     * @param filename file to download
+     * @param outpath file output path
+     * @throws Exception fileNotFound, IOException
+     */
     private static void downloadFile(String filename, String outpath) throws Exception {
         Client.receiveAndUncipher(filename);
         File dst = new File(outpath);
@@ -220,13 +253,20 @@ public class Client {
         src.delete();
     }
 
+    /**
+     * Print file from server
+     * @param filename filename to print
+     * @throws Exception fileNotFound, IOException
+     */
     private static void printFile(String filename) throws Exception {
         Client.receiveAndUncipher(filename);
         Thread.sleep(50);
-        BufferedReader br = new BufferedReader(new FileReader(Client.generatePath(filename)));
+        BufferedReader br = new BufferedReader(new FileReader(Client.generatePath(filename), StandardCharsets.UTF_8));
         String line;
+
+        PrintStream out = new PrintStream(System.out, true, StandardCharsets.UTF_8);
         while ((line = br.readLine()) != null) {
-            System.out.println(line);
+            out.println(line);
         }
         br.close();
 
@@ -237,9 +277,19 @@ public class Client {
         c.delete();
     }
 
+    /**
+     * Uplaod file to server
+     * @param filename filename (srv side)
+     * @param path source path
+     * @throws Exception fileNotFound, IOException
+     */
     private static void uploadFile(String filename, String path) throws Exception {
         File src = new File(path);
         File dst = new File(Client.generatePath(filename));
+        if(!src.exists()){
+            System.out.println("Error : cannot find specified file");
+            return;
+        }
         try {
             FileUtils.copyFile(src, dst);
         } catch (IOException e) {
@@ -258,6 +308,10 @@ public class Client {
         c.delete();
     }
 
+    /**
+     * Revoke a user
+     * @throws Exception fileNotFound, IOException
+     */
     private static void revokeUser() throws Exception {
         if(Client.vAttr.nUsers <= Client.NRECOVER) {
             System.out.println("Not enough user to revoke one, you must register a new user. Please set new user amount");
@@ -270,12 +324,19 @@ public class Client {
         Client.initialUserAuth();
     }
 
+    /**
+     * Print file register
+     */
     private static void printRegister() {
         for(String filename : Client.fileRegister.files){
             System.out.println(filename);
         }
     }
 
+    /**
+     * Exit a company's vault
+     * @throws Exception fileNotFound, IOException
+     */
     private static void exitCompany() throws Exception {
         //Cipher + send fileRegister
         Client.writeObjToFile(Client.fileRegister, Client.registerFilename);
@@ -289,18 +350,28 @@ public class Client {
         Client.fileRegister = null;
     }
 
+    /**
+     * Cipher a file and send it to the server
+     * @param filename name of the file to process
+     * @throws Exception fileNotFound, IOException
+     */
     private static void cipherAndSend(String filename) throws Exception {
-        Client.cry.AES256GCMFileEncrypt(Client.cry.generateFileKey(Client.vAttr.masterKey, filename),
+        Client.cry.AES256GCMEncrypt(Client.cry.generateFileKey(Client.vAttr.masterKey, filename),
                 Client.generatePath(filename),
                 Client.generatePath(Client.generateCipheredFilename(filename)));
 
         Client.sendFile(Client.generateCipheredFilename(filename));
     }
 
+    /**
+     * Download a file from server and decipher it
+     * @param filename name of the file to process
+     * @throws Exception fileNotFound, IOException
+     */
     private static void receiveAndUncipher(String filename) throws Exception {
         Client.receiveFile(Client.generateCipheredFilename(filename));
 
-        Client.cry.AES256GCMFileDecrypt(
+        Client.cry.AES256GCMDecrypt(
                 Client.cry.generateFileKey(Client.vAttr.masterKey, filename),
                 Client.generatePath(Client.generateCipheredFilename(filename)),
                 Client.generatePath(filename)
@@ -309,6 +380,12 @@ public class Client {
         (new File(Client.generateCipheredFilename(filename))).delete();
     }
 
+    /**
+     * Create a new company (vault)
+     * @param companyName name of the company
+     * @param nUser number of user to authenticate
+     * @throws Exception fileNotFound, IOException
+     */
     private static void newCompany(String companyName, String nUser) throws Exception {
         if(Client.companyName != null){
             System.out.println("Error : first exit current company's vault !");
@@ -346,8 +423,19 @@ public class Client {
         Client.fileRegister = new FileRegister();
     }
 
+    /**
+     * Generate ciphered filename (different from clear filename)
+     * @param filename clear filename
+     * @return filename with "cip-" added in front
+     */
     private static String generateCipheredFilename(String filename){return "cip-" + filename;}
 
+    /**
+     * Writes an object to a file using Google gson library
+     * @param obj Object to process
+     * @param filename Output filename
+     * @throws IOException IOException
+     */
     private static void writeObjToFile(Object obj, String filename) throws IOException {
         File f = new File(generatePath(filename));
         f.createNewFile();
@@ -357,6 +445,14 @@ public class Client {
         fw.close();
     }
 
+    /**
+     * Get an object from a json file using Google gson library
+     * @param filename name of the file to process
+     * @param type Type of the object to creat
+     * @param <T> Type
+     * @return Created object
+     * @throws IOException IOException
+     */
     private static <T> T getObjFromFile(String filename, Class<T> type) throws IOException {
         File f = new File(generatePath(filename));
         FileReader fr = new FileReader(f);
@@ -366,29 +462,32 @@ public class Client {
         return ret;
     }
 
+    /**
+     * Sends master key to server (ciphered master key)
+     * @throws Exception fileNotFound, IOException
+     */
     private static void sendMasterKey() throws Exception {
-        IvParameterSpec iv = Client.cry.generateIV();
-        CipheredMasterKey cmk = new CipheredMasterKey(
-                Base64.getEncoder().encodeToString(Client.cry.AES256GCMStringEncrypt(Client.vAttr.unlockKey, Client.vAttr.masterKey, iv)),
-                Base64.getEncoder().encodeToString(iv.getIV())
-        );
+        Client.cry.AES256GCMEncrypt(
+                Client.vAttr.unlockKey,
+                Client.vAttr.masterKey,
+                Client.generatePath(Client.masterKeyFilename));
 
-        writeObjToFile(cmk, Client.masterKeyFilename);
         Client.sendFile(Client.masterKeyFilename);
     }
 
+    /**
+     * Receive master key from server (ciphered) and decipher it
+     * @throws Exception fileNotFound, IOException
+     */
     private static void receiveMasterKey() throws Exception {
         Client.receiveFile(Client.masterKeyFilename);
-        CipheredMasterKey cmk = getObjFromFile(Client.masterKeyFilename, CipheredMasterKey.class);
-
-        Client.vAttr.masterKey = Client.cry.AES256GCMStringDecrypt(
-                Client.vAttr.unlockKey,
-                Base64.getDecoder().decode(cmk.ciphered_key),
-                new IvParameterSpec(Base64.getDecoder().decode(cmk.iv))
-        );
-        (new File(Client.generatePath(Client.masterKeyFilename))).delete();
+        Client.vAttr.masterKey = Client.cry.AES256GCMDecrypt(Client.vAttr.unlockKey, Client.generatePath(masterKeyFilename));
     }
 
+    /**
+     * Create current company working folder on client side
+     * @throws IOException IOException
+     */
     private static void initCompanyFolder() throws IOException{
         File checkPath = new File(workPath + Client.companyName);
         if(!checkPath.exists()){
@@ -398,6 +497,12 @@ public class Client {
         }
     }
 
+    /**
+     * Process to initial user authentication (called at company creation or user revoke)
+     * Each user must provide with a username / password
+     * The generated shares are then sent to the server as well as the ciphered master key
+     * @throws Exception fileNotFound, IOException
+     */
     private static void initialUserAuth() throws Exception {
         String[] usernames = new String[Client.vAttr.nUsers];
         String[] passwords = new String[Client.vAttr.nUsers];
@@ -411,16 +516,20 @@ public class Client {
         for(int i = 0; i < Client.vAttr.nUsers; ++i){
             System.out.print("Username" + i + ">");
             usernames[i] = sc.nextLine();
+            boolean passwordMismatch = false;
             do {
                 System.out.print("Password" + i + ">");
                 passwords[i] = sc.nextLine();
                 System.out.print("Confirm password" + i + ">");
-            } while(!Objects.equals(sc.nextLine(), passwords[i]));
+                passwordMismatch = !Objects.equals(sc.nextLine(), passwords[i]);
+                if(passwordMismatch)
+                    System.out.println("Error : password missmatch, please try again.");
+            } while(passwordMismatch);
 
             IvParameterSpec iv = Client.cry.generateIV();
             userPointList.userPoints[i] = new CipheredUserPoint(
                     Base64.getEncoder().encodeToString(cry.sha256(usernames[i])),
-                    Base64.getEncoder().encodeToString(Client.cry.AES256GCMStringEncrypt(
+                    Base64.getEncoder().encodeToString(Client.cry.AES256GCMEncrypt(
                             Client.cry.sha256(passwords[i]),
                             pointMap.get(i+1),
                             iv
@@ -437,6 +546,16 @@ public class Client {
         sendMasterKey();
     }
 
+    /**
+     * Select a company
+     * -> Sends select-company command to server
+     * -> Init company folder (client side)
+     * -> Receive shamir shared
+     * -> Process with user authentication
+     * -> Receive and decipher master key
+     * @param company_name name of the company to process
+     * @throws Exception fileNotFound, IOException
+     */
     private static void selectCompany(String company_name) throws Exception {
         if(Client.companyName != null){
             System.out.println("Error : first exit current company's vault !");
@@ -469,7 +588,6 @@ public class Client {
         //Get master key from srv + uncipher
         receiveMasterKey();
 
-        //TODO : get file register + uncipher
         Client.receiveAndUncipher(Client.registerFilename);
         Client.fileRegister = new FileRegister();
         Client.fileRegister = Client.getObjFromFile(Client.registerFilename, FileRegister.class);
@@ -478,6 +596,10 @@ public class Client {
         System.out.println("Vault unlocked");
     }
 
+    /**
+     * Authenticate users and recover unlock key from shamir shares
+     * @param userPointList List of ciphered userPoint(share)/username
+     */
     private static void recoverUnlockKey(CipheredUserPointList userPointList) {
 
         Map<Integer, byte[]> pointMap = new HashMap<>();
@@ -505,7 +627,7 @@ public class Client {
                 for (int j = 0; j < userPointList.userPoints.length; ++j) {
                     if (Objects.equals(userPointList.userPoints[j].username, hashUsername) && pointMap.get(j+1) == null) {
                         //If match, try to uncipher point with password hash
-                        recoveredPoint = Client.cry.AES256GCMStringDecrypt(
+                        recoveredPoint = Client.cry.AES256GCMDecrypt(
                                 hashPassword,
                                 Base64.getDecoder().decode(userPointList.userPoints[j].cipher_point),
                                 new IvParameterSpec(Base64.getDecoder().decode(userPointList.userPoints[j].iv))
@@ -526,8 +648,18 @@ public class Client {
         Client.vAttr.unlockKey = Client.cry.recoverUnlockKey(userPointList.userPoints.length, Client.NRECOVER, pointMap);
     }
 
+    /**
+     * Generate path from a filename (adding workingPath in front)
+     * @param filename Name of the file to process
+     * @return generated path
+     */
     private static String generatePath(String filename){ return Client.workPath + Client.companyName + "\\" + filename;}
 
+    /**
+     * Send a file to the server
+     * @param filename file to send
+     * @throws Exception fileNotFound, IOException
+     */
     private static void sendFile(String filename) throws Exception{
         int bytes;
         File file = new File(Client.generatePath(filename));
@@ -551,6 +683,11 @@ public class Client {
         file.delete();
     }
 
+    /**
+     * Receive a file from the server
+     * @param filename file to receive
+     * @throws Exception fileNotFound, IOException
+     */
     private static void receiveFile(String filename) throws Exception{
         int bytes;
         FileOutputStream fileOutputStream = new FileOutputStream(Client.generatePath(filename));
@@ -570,8 +707,10 @@ public class Client {
         fileOutputStream.close();
     }
 
+    /**
+     * Used for test purposes
+     */
     private static void test(){
-        System.out.println(help);
     }
 
 }

@@ -1,12 +1,9 @@
 package vault.server;
 
-import com.google.gson.Gson;
-
 import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
+
 
 public class Server {
     private static final int srv_port = 8008;
@@ -18,14 +15,13 @@ public class Server {
     private static String companyName = null;
     private static final String workPath = ".\\data\\server\\";
 
-//TODO : Catch connexion comme dans client
 
     public static void main(String[] args){
         ServerSocket serverSocket;
         try {
             serverSocket = new ServerSocket(srv_port);
         } catch (IOException ex) {
-            System.out.println("Error : " + ex.toString());
+            System.out.println("Error : " + ex);
             return;
         }
         while(true) {
@@ -43,46 +39,45 @@ public class Server {
                     }
                     processInput(input);
                 }
-                clientSocket.close();
-                in.close();
-                out.close();
+
             } catch (Exception ex) {
+                System.out.println("Error : " + ex);
+            } finally {
                 if (in != null) {
                     try {
                         in.close();
                     } catch (IOException ex1) {
-                        System.out.println("Error : " + ex1.toString());
+                        System.out.println("Error : " + ex1);
                     }
                 }
                 if (dataInputStream != null) {
                     try {
                         dataInputStream.close();
                     } catch (IOException ex1) {
-                        System.out.println("Error : " + ex1.toString());
+                        System.out.println("Error : " + ex1);
                     }
                 }
                 if (dataOutputStream != null) {
                     try {
                         dataOutputStream.close();
                     } catch (IOException ex1) {
-                        System.out.println("Error : " + ex1.toString());
+                        System.out.println("Error : " + ex1);
                     }
                 }
                 if (out != null) {
                     try {
                         out.close();
                     } catch (IOException ex1) {
-                        System.out.println("Error : " + ex1.toString());
+                        System.out.println("Error : " + ex1);
                     }
                 }
                 if (clientSocket != null) {
                     try {
                         clientSocket.close();
                     } catch (IOException ex1) {
-                        System.out.println("Error : " + ex1.toString());
+                        System.out.println("Error : " + ex1);
                     }
                 }
-                System.out.println("Error : " + ex.toString());
             }
         }
     }
@@ -106,8 +101,12 @@ public class Server {
         }
     }
 
-    private static void deleteFile(String filename) {
-        (new File(Server.generatePath(filename))).delete();
+    private static void deleteFile(String filename) throws IOException {
+        if((new File(Server.generatePath(filename))).delete())
+            out.write("ok\n");
+        else
+            out.write("error\n");
+        out.flush();
     }
 
     private static void newCompany(String companyName) throws IOException {
@@ -142,7 +141,7 @@ public class Server {
     private static String generatePath(String filename){ return Server.workPath + Server.companyName + "\\" +filename;}
 
     private static void sendFile(String filename) throws Exception{
-        int bytes = 0;
+        int bytes;
         File file = new File(Server.generatePath(filename));
         FileInputStream fileInputStream = new FileInputStream(generatePath(filename));
 
@@ -158,7 +157,7 @@ public class Server {
     }
 
     private static void receiveFile(String filename) throws Exception{
-        int bytes = 0;
+        int bytes;
         FileOutputStream fileOutputStream = new FileOutputStream(generatePath(filename));
 
         long size = dataInputStream.readLong();     // read file size
